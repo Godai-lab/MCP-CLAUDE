@@ -1,19 +1,23 @@
+import requests
 import json
 import os
-import requests
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from typing import List, Dict
+from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configuración
-app = Flask(__name__)
-CORS(app)
+# Get port from environment variable (Railway sets this, defaults to 8080 for local dev)
+PORT = int(os.environ.get("PORT", 8080))
+
+# Initialize FastMCP server with host and port in constructor
+mcp = FastMCP("claude", host="0.0.0.0", port=PORT)
+
+# Get API key from environment
 anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 
-def call_claude(model: str, prompt: str, max_tokens: int = 1024) -> str:
-    """Llama a Claude con el modelo especificado"""
+def call_claude_api(model: str, prompt: str, max_tokens: int = 1024) -> str:
+    """Llama a la API de Claude con el modelo especificado"""
     try:
         response = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -39,154 +43,137 @@ def call_claude(model: str, prompt: str, max_tokens: int = 1024) -> str:
     except Exception as e:
         raise Exception(f"Failed to call Claude: {str(e)}")
 
-# Endpoints HTTP para OpenAI
-@app.route("/", methods=["GET"])
-def home():
-    """Endpoint de bienvenida con información de herramientas"""
-    return jsonify({
-        "name": "Claude MCP Server",
-        "version": "1.0.0",
-        "description": "Servidor MCP híbrido para conectar OpenAI con Claude",
-        "status": "online",
-        "protocol": "HTTP + MCP compatible",
-        "tools": [
-            {
-                "name": "call_claude",
-                "description": "Llama a Claude con el modelo especificado y retorna la respuesta",
-                "endpoint": "/call_claude",
-                "method": "POST",
-                "parameters": {
-                    "model": "string (ej: claude-3-5-sonnet-20241022)",
-                    "prompt": "string (pregunta para Claude)",
-                    "max_tokens": "number (opcional, default: 1024)"
-                },
-                "example": {
-                    "url": "POST https://mcp-claude-production.up.railway.app/call_claude",
-                    "body": {
-                        "model": "claude-3-5-sonnet-20241022",
-                        "prompt": "¿Cuál es la capital de Francia?",
-                        "max_tokens": 100
-                    }
-                }
-            }
-        ],
-        "endpoints": {
-            "discover_tools": "GET /mcp/v1/tools",
-            "call_claude": "POST /call_claude",
-            "resources": "GET /mcp/v1/resources",
-            "prompts": "GET /mcp/v1/prompts"
-        },
-        "usage": {
-            "step1": "GET /mcp/v1/tools - Descubrir herramientas disponibles",
-            "step2": "POST /call_claude - Ejecutar herramienta call_claude",
-            "step3": "Formato: {model, prompt, max_tokens?}",
-            "note": "Para nuevas herramientas: POST /{nombre_herramienta}"
-        },
-        "important": {
-            "primary_endpoint": "POST /call_claude",
-            "format": "Direct JSON with {model, prompt, max_tokens?}",
-            "no_wrapper": "No need for 'name' or 'arguments' wrapper"
-        }
-    })
+@mcp.tool()
+def call_claude(model: str, prompt: str, max_tokens: int = 1024) -> str:
+    """
+    Llama a Claude con el modelo especificado y retorna la respuesta.
 
-@app.route("/mcp/v1/tools", methods=["GET"])
-def list_tools():
-    """Lista las herramientas disponibles - Formato OpenAI compatible"""
-    tools = [
+    Args:
+        model: El modelo de Claude a utilizar (ej: claude-3-5-sonnet-20241022)
+        prompt: El prompt a enviar al modelo
+        max_tokens: Máximo número de tokens en la respuesta (opcional, default: 1024)
+
+    Returns:
+        Respuesta de Claude como string
+    """
+    try:
+        if not anthropic_api_key:
+            return "Error: ANTHROPIC_API_KEY no está configurada"
+        
+        result = call_claude_api(model, prompt, max_tokens)
+        return result
+        
+    except Exception as e:
+        return f"Error llamando a Claude: {str(e)}"
+
+@mcp.tool()
+def get_claude_models() -> str:
+    """
+    Obtiene la lista de modelos de Claude disponibles.
+
+    Returns:
+        JSON string con los modelos disponibles
+    """
+    models = [
         {
-            "name": "call_claude",
-            "description": "Llama a Claude con el modelo especificado y retorna la respuesta",
-            "endpoint": "/call_claude",
-            "method": "POST",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "model": {
-                        "type": "string",
-                        "description": "El modelo de Claude a utilizar (ej: claude-3-5-sonnet-20241022)",
-                    },
-                    "prompt": {
-                        "type": "string",
-                        "description": "El prompt a enviar al modelo",
-                    },
-                    "max_tokens": {
-                        "type": "number",
-                        "description": "Máximo número de tokens en la respuesta (opcional, default: 1024)",
-                        "default": 1024
-                    },
-                },
-                "required": ["model", "prompt"],
-            },
-            "usage": {
-                "url": "POST /call_claude",
-                "format": "Direct JSON: {model, prompt, max_tokens?}",
-                "note": "No wrapper needed - send parameters directly"
-            }
+            "name": "claude-3-5-sonnet-20241022",
+            "description": "Claude 3.5 Sonnet - Modelo más reciente y potente",
+            "max_tokens": 8192,
+            "recommended": True
+        },
+        {
+            "name": "claude-3-5-haiku-20241022", 
+            "description": "Claude 3.5 Haiku - Modelo rápido y eficiente",
+            "max_tokens": 8192,
+            "recommended": False
+        },
+        {
+            "name": "claude-3-opus-20240229",
+            "description": "Claude 3 Opus - Modelo anterior pero potente",
+            "max_tokens": 4096,
+            "recommended": False
         }
     ]
     
-    # Headers para compatibilidad con OpenAI
-    response = jsonify({"tools": tools})
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-    return response
+    return json.dumps(models, indent=2)
 
-@app.route("/call_claude", methods=["POST"])
-def call_claude_endpoint():
-    """Endpoint específico para call_claude - Formato simplificado"""
+@mcp.resource("claude://models")
+def get_available_models() -> str:
+    """
+    Recurso que lista todos los modelos de Claude disponibles.
+    """
     try:
-        data = request.json
+        content = "# Modelos de Claude Disponibles\n\n"
+        content += "## Modelos Recomendados\n\n"
+        content += "- **claude-3-5-sonnet-20241022**: Modelo más reciente y potente (recomendado)\n"
+        content += "- **claude-3-5-haiku-20241022**: Modelo rápido y eficiente\n\n"
+        content += "## Modelos Anteriores\n\n"
+        content += "- **claude-3-opus-20240229**: Modelo anterior pero potente\n\n"
+        content += "## Uso\n\n"
+        content += "Usa `call_claude(model='nombre_del_modelo', prompt='tu_pregunta')` para llamar a cualquier modelo.\n"
         
-        # Validar parámetros requeridos
-        if "model" not in data:
-            return jsonify({"error": "Parámetro 'model' es requerido"}), 400
-        if "prompt" not in data:
-            return jsonify({"error": "Parámetro 'prompt' es requerido"}), 400
+        return content
         
-        result = call_claude(
-            model=data["model"],
-            prompt=data["prompt"],
-            max_tokens=data.get("max_tokens", 1024),
-        )
-        
-        return jsonify({
-            "content": [
-                {
-                    "type": "text",
-                    "text": result
-                }
-            ]
-        })
-            
     except Exception as e:
-        return jsonify({
-            "error": str(e)
-        }), 500
+        return f"# Error\n\nError obteniendo modelos: {str(e)}"
 
+@mcp.resource("claude://status")
+def get_server_status() -> str:
+    """
+    Recurso que muestra el estado del servidor Claude MCP.
+    """
+    try:
+        content = "# Estado del Servidor Claude MCP\n\n"
+        content += f"**Servidor**: Claude MCP Server\n"
+        content += f"**Puerto**: {PORT}\n"
+        content += f"**API Key**: {'✅ Configurada' if anthropic_api_key else '❌ No configurada'}\n\n"
+        content += "## Herramientas Disponibles\n\n"
+        content += "- `call_claude`: Llama a cualquier modelo de Claude\n"
+        content += "- `get_claude_models`: Obtiene lista de modelos disponibles\n\n"
+        content += "## Recursos Disponibles\n\n"
+        content += "- `claude://models`: Lista de modelos\n"
+        content += "- `claude://status`: Estado del servidor\n\n"
+        
+        return content
+        
+    except Exception as e:
+        return f"# Error\n\nError obteniendo estado: {str(e)}"
 
-@app.route("/mcp/v1/resources", methods=["GET"])
-def list_resources():
-    """Lista los recursos disponibles"""
-    return jsonify({
-        "resources": []
-    })
+@mcp.prompt()
+def generate_claude_prompt(question: str, model: str = "claude-3-5-sonnet-20241022") -> str:
+    """
+    Genera un prompt optimizado para obtener la mejor respuesta de Claude.
+    
+    Args:
+        question: La pregunta o tarea a realizar
+        model: El modelo de Claude a usar (opcional)
+    """
+    return f"""Usa Claude para responder la siguiente pregunta de manera completa y útil:
 
-@app.route("/mcp/v1/prompts", methods=["GET"])
-def list_prompts():
-    """Lista los prompts disponibles"""
-    return jsonify({
-        "prompts": []
-    })
+**Pregunta**: {question}
+
+**Instrucciones**:
+1. Usa el modelo {model} para obtener la mejor respuesta
+2. Proporciona una respuesta detallada y bien estructurada
+3. Si es apropiado, incluye ejemplos o explicaciones paso a paso
+4. Asegúrate de que la respuesta sea precisa y útil
+
+**Comando sugerido**:
+```
+call_claude(model='{model}', prompt='{question}', max_tokens=1024)
+```
+
+Responde de manera clara y profesional."""
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    print("🚀 Claude MCP Server Híbrido iniciado")
-    print("📡 Endpoints HTTP disponibles para OpenAI:")
-    print(f"  - GET  /")
-    print(f"  - GET  /mcp/v1/tools")
-    print(f"  - POST /mcp/v1/call_tool")
-    print(f"  - GET  /mcp/v1/resources")
-    print(f"  - GET  /mcp/v1/prompts")
-    print("🔗 Compatible con OpenAI y clientes MCP")
-    app.run(host="0.0.0.0", port=port, debug=False)
+    # Initialize and run the server
+    print(f"🚀 Iniciando Claude MCP Server en 0.0.0.0:{PORT}")
+    print("📡 Usando FastMCP con transporte SSE")
+    print("🔗 Compatible con OpenAI y Claude")
+    
+    if not anthropic_api_key:
+        print("⚠️  ADVERTENCIA: ANTHROPIC_API_KEY no está configurada")
+        print("   Configura la variable de entorno para que funcione correctamente")
+    
+    # Run with SSE transport (host and port already set in constructor)
+    mcp.run(transport='sse')
