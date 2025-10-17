@@ -42,13 +42,51 @@ def call_claude(model: str, prompt: str, max_tokens: int = 1024) -> str:
 # Endpoints HTTP para OpenAI
 @app.route("/", methods=["GET"])
 def home():
-    """Endpoint de bienvenida"""
+    """Endpoint de bienvenida con información de herramientas"""
     return jsonify({
         "name": "Claude MCP Server",
         "version": "1.0.0",
         "description": "Servidor MCP híbrido para conectar OpenAI con Claude",
         "status": "online",
-        "protocol": "HTTP + MCP compatible"
+        "protocol": "HTTP + MCP compatible",
+        "tools": [
+            {
+                "name": "call_claude",
+                "description": "Llama a Claude con el modelo especificado y retorna la respuesta",
+                "endpoint": "/call_claude",
+                "method": "POST",
+                "parameters": {
+                    "model": "string (ej: claude-3-5-sonnet-20241022)",
+                    "prompt": "string (pregunta para Claude)",
+                    "max_tokens": "number (opcional, default: 1024)"
+                },
+                "example": {
+                    "url": "POST https://mcp-claude-production.up.railway.app/call_claude",
+                    "body": {
+                        "model": "claude-3-5-sonnet-20241022",
+                        "prompt": "¿Cuál es la capital de Francia?",
+                        "max_tokens": 100
+                    }
+                }
+            }
+        ],
+        "endpoints": {
+            "discover_tools": "GET /mcp/v1/tools",
+            "call_claude": "POST /call_claude",
+            "resources": "GET /mcp/v1/resources",
+            "prompts": "GET /mcp/v1/prompts"
+        },
+        "usage": {
+            "step1": "GET /mcp/v1/tools - Descubrir herramientas disponibles",
+            "step2": "POST /call_claude - Ejecutar herramienta call_claude",
+            "step3": "Formato: {model, prompt, max_tokens?}",
+            "note": "Para nuevas herramientas: POST /{nombre_herramienta}"
+        },
+        "important": {
+            "primary_endpoint": "POST /call_claude",
+            "format": "Direct JSON with {model, prompt, max_tokens?}",
+            "no_wrapper": "No need for 'name' or 'arguments' wrapper"
+        }
     })
 
 @app.route("/mcp/v1/tools", methods=["GET"])
@@ -58,6 +96,8 @@ def list_tools():
         {
             "name": "call_claude",
             "description": "Llama a Claude con el modelo especificado y retorna la respuesta",
+            "endpoint": "/call_claude",
+            "method": "POST",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -77,6 +117,11 @@ def list_tools():
                 },
                 "required": ["model", "prompt"],
             },
+            "usage": {
+                "url": "POST /call_claude",
+                "format": "Direct JSON: {model, prompt, max_tokens?}",
+                "note": "No wrapper needed - send parameters directly"
+            }
         }
     ]
     
@@ -87,38 +132,38 @@ def list_tools():
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
     return response
 
-@app.route("/mcp/v1/call_tool", methods=["POST"])
-def call_tool():
-    """Ejecuta una herramienta - Formato OpenAI compatible"""
+@app.route("/call_claude", methods=["POST"])
+def call_claude_endpoint():
+    """Endpoint específico para call_claude - Formato simplificado"""
     try:
         data = request.json
-        tool_name = data.get("name")
-        tool_input = data.get("arguments", {})
         
-        if tool_name == "call_claude":
-            result = call_claude(
-                model=tool_input["model"],
-                prompt=tool_input["prompt"],
-                max_tokens=tool_input.get("max_tokens", 1024),
-            )
-            
-            return jsonify({
-                "content": [
-                    {
-                        "type": "text",
-                        "text": result
-                    }
-                ]
-            })
-        else:
-            return jsonify({
-                "error": f"Herramienta desconocida: {tool_name}"
-            }), 400
+        # Validar parámetros requeridos
+        if "model" not in data:
+            return jsonify({"error": "Parámetro 'model' es requerido"}), 400
+        if "prompt" not in data:
+            return jsonify({"error": "Parámetro 'prompt' es requerido"}), 400
+        
+        result = call_claude(
+            model=data["model"],
+            prompt=data["prompt"],
+            max_tokens=data.get("max_tokens", 1024),
+        )
+        
+        return jsonify({
+            "content": [
+                {
+                    "type": "text",
+                    "text": result
+                }
+            ]
+        })
             
     except Exception as e:
         return jsonify({
             "error": str(e)
         }), 500
+
 
 @app.route("/mcp/v1/resources", methods=["GET"])
 def list_resources():
