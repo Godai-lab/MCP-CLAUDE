@@ -1,6 +1,6 @@
 # Claude MCP Server para OpenAI
 
-Servidor MCP (Model Context Protocol) que permite a agentes de OpenAI llamar a modelos de Claude.
+Servidor MCP (Model Context Protocol) que permite a agentes de OpenAI llamar a modelos de Claude usando el SDK oficial de MCP.
 
 ## 🚀 Despliegue en Railway
 
@@ -46,19 +46,11 @@ Servidor MCP para llamar a modelos de Claude
 - Por ahora: Selecciona "Sin autenticación" o deja el token vacío
 - Para producción: Implementaremos autenticación posteriormente
 
-## 📡 Endpoints disponibles
-
-- `GET /` - Estado del servidor
-- `GET /mcp/v1/tools` - Lista las herramientas disponibles
-- `POST /mcp/v1/call_tool` - Ejecuta una herramienta
-- `GET /mcp/v1/resources` - Lista los recursos
-- `GET /mcp/v1/prompts` - Lista los prompts
-
 ## 🛠️ Herramienta disponible
 
 ### `call_claude`
 
-Llama a un modelo de Claude con un prompt específico.
+Llama a un modelo de Claude con un prompt específico usando el protocolo MCP oficial.
 
 **Parámetros:**
 - `model` (string, requerido): El modelo de Claude (ej: "claude-3-5-sonnet-20241022")
@@ -81,15 +73,16 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edita .env y agrega tu ANTHROPIC_API_KEY
 
-# Ejecutar servidor
+# Ejecutar servidor MCP
 python app.py
 ```
 
-El servidor estará disponible en `http://localhost:8080`
+El servidor MCP usará stdio para la comunicación (no HTTP).
 
 ## 📝 Notas
 
-- El servidor está configurado sin autenticación para pruebas
-- Para producción, se debe implementar autenticación con API keys
-- Asegúrate de que tu API key de Anthropic tenga saldo suficiente
+- **SDK Oficial:** Usa el SDK oficial de MCP para máxima compatibilidad
+- **Protocolo stdio:** MCP usa stdio, no HTTP REST
+- **Sin autenticación:** Configurado para pruebas
+- **API Key requerida:** Asegúrate de que tu API key de Anthropic tenga saldo suficiente
 

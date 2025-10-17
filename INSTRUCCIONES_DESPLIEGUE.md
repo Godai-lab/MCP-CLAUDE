@@ -3,16 +3,13 @@
 ## 🎯 Pasos para desplegar en Railway
 
 ### 1. Preparar el código
-✅ Ya está listo - todos los archivos necesarios están configurados
+✅ Ya está listo - ahora usa el SDK oficial de MCP
 
 ### 2. Subir a GitHub (si aún no lo has hecho)
 ```bash
-git init
 git add .
-git commit -m "Servidor MCP para OpenAI listo para Railway"
-git branch -M main
-git remote add origin tu-repositorio-github.git
-git push -u origin main
+git commit -m "Actualizado a SDK oficial de MCP"
+git push origin main
 ```
 
 ### 3. Desplegar en Railway
